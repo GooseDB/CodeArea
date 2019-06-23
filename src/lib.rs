@@ -60,6 +60,18 @@ impl Syntax {
         }
         self
     }
+    pub fn add_words(mut self, dictionary: &[(&str, Color)]) -> Self {
+        for (word, color) in dictionary {
+            self.words.insert(word.to_string(), *color);
+        }
+        self 
+    }
+    pub fn add_symbols(mut self, dictionary: &[(char, Color)]) -> Self {
+        for (symbol, color) in dictionary {
+            self.symbols.insert(*symbol, *color);
+        }
+        self 
+    }
 }
 
 /// Multi-lines code editor.
@@ -98,6 +110,16 @@ impl CodeArea {
             last_size: Vec2::zero(),
             cursor: 0,
         }
+    }
+    pub fn add_syntax(mut self, syntax: Syntax) -> Self {
+        self.syntax = syntax;
+        self
+    }
+    pub fn enable(&mut self) {
+        self.enabled = true;
+    }
+    pub fn disable(&mut self) {
+        self.enabled = false;
     }
     pub fn get_content(&self) -> &str {
         &self.content
@@ -157,6 +179,7 @@ impl CodeArea {
             None => {}
         }
     }
+    fn redo(&mut self) {}
 }
 
 impl View for CodeArea {
@@ -181,8 +204,8 @@ impl View for CodeArea {
             Event::Key(Key::Up) => unimplemented!(),
             Event::Key(Key::Down) => unimplemented!(),
             // Edit
-            Event::CtrlChar('z') => unimplemented!(),
-            Event::CtrlChar('y') => unimplemented!(),
+            Event::CtrlChar('z') => self.undo(),
+            Event::CtrlChar('y') => self.redo(),
             // TODO: Mouse events
             _ => consumed = false,
         }
