@@ -16,6 +16,7 @@ struct Row {
 /// Create your own set of symbols and words.
 /// You can add words like 'for', 'in', ect.
 /// and symbols like '+', '-', ect.
+/// As well as TextArea, CodeArea should be wrapped by BoxView
 pub struct Syntax {
     symbols: HashMap<char, Color>,
     words: HashMap<String, Color>,
@@ -28,12 +29,6 @@ impl Default for Syntax {
             words: HashMap::new(),
         }
     }
-}
-
-enum HistoryEvent {
-    Erase(String),
-    Type(usize),
-    Moved(usize),
 }
 
 impl Syntax {
@@ -64,13 +59,39 @@ impl Syntax {
         for (word, color) in dictionary {
             self.words.insert(word.to_string(), *color);
         }
-        self 
+        self
     }
     pub fn add_symbols(mut self, dictionary: &[(char, Color)]) -> Self {
         for (symbol, color) in dictionary {
             self.symbols.insert(*symbol, *color);
         }
-        self 
+        self
+    }
+}
+
+enum HistoryEvent {
+    Erase(String),
+    Type(String),
+    Moved(usize),
+}
+
+struct History {
+    sequence: VecDeque<HistoryEvent>,
+    counter: usize,
+}
+
+impl History {
+    fn new() -> Self {
+        Self {
+            sequence: VecDeque::new(),
+            counter: 0,
+        }
+    }
+    fn erase_used(&mut self) {
+        while self.counter > 0 {
+            self.sequence.pop_front();
+            self.counter -= 1;
+        }
     }
 }
 
@@ -80,7 +101,7 @@ impl Syntax {
 /// and can highligh your code using
 /// your syntax
 pub struct CodeArea {
-    history: VecDeque<HistoryEvent>,
+    history: History,
 
     syntax: Syntax,
 
@@ -101,7 +122,7 @@ pub struct CodeArea {
 impl CodeArea {
     pub fn new() -> Self {
         CodeArea {
-            history: VecDeque::new(),
+            history: History::new(),
             syntax: Syntax::new(),
             content: String::new(),
             rows: Vec::new(),
@@ -126,15 +147,20 @@ impl CodeArea {
     }
 }
 
-// Internal functional
+// Text manage
 impl CodeArea {
     fn insert(&mut self, ch: char) {
         self.content.insert(self.cursor, ch);
         self.cursor += 1;
-        match self.history.front_mut() {
-            Some(HistoryEvent::Type(ref mut typed)) => *typed += 1,
+        self.history.erase_used();
+        match self.history.sequence.front_mut() {
+            Some(HistoryEvent::Type(ref mut typed)) => typed.push(ch),
             _ => {
-                self.history.push_front(HistoryEvent::Type(1));
+                let mut new_typed = String::new();
+                new_typed.push(ch);
+                self.history
+                    .sequence
+                    .push_front(HistoryEvent::Type(new_typed));
             }
         }
     }
@@ -142,12 +168,15 @@ impl CodeArea {
         if self.cursor != 0 {
             let erased_char = self.content.remove(self.cursor);
             self.cursor -= 1;
-            match self.history.front_mut() {
+            self.history.erase_used();
+            match self.history.sequence.front_mut() {
                 Some(HistoryEvent::Erase(ref mut erased)) => erased.push(erased_char),
                 _ => {
                     let mut new_erased = String::new();
                     new_erased.push(erased_char);
-                    self.history.push_front(HistoryEvent::Erase(new_erased));
+                    self.history
+                        .sequence
+                        .push_front(HistoryEvent::Erase(new_erased));
                 }
             }
         };
@@ -161,20 +190,38 @@ impl CodeArea {
                 erased_string.push(ch);
                 self.cursor -= 1;
             }
-            match self.history.front_mut() {
+            self.history.erase_used();
+            match self.history.sequence.front_mut() {
                 Some(HistoryEvent::Erase(ref mut erased)) => erased.push_str(&erased_string),
-                _ => self.history.push_front(HistoryEvent::Erase(erased_string)),
+                _ => self
+                    .history
+                    .sequence
+                    .push_front(HistoryEvent::Erase(erased_string)),
             }
         }
     }
+}
+
+// Cursor manage
+impl CodeArea {}
+
+// Edit
+impl CodeArea {
     fn undo(&mut self) {
-        match self.history.front() {
-            Some(event) => match event {
-                HistoryEvent::Erase(erased) => {
-                    let erased = erased.chars().rev().collect::<String>();
-                    self.content.insert_str(self.cursor, &erased);
+        match self.history.sequence.front() {
+            Some(event) => {
+                self.history.counter += 1;
+                match event {
+                    HistoryEvent::Erase(erased) => {
+                        let erased = erased.chars().rev().collect::<String>();
+                        self.content.insert_str(self.cursor, &erased);
+                    }
+                    HistoryEvent::Type(typed) => {
+                        self.content
+                            .replace_range(self.cursor - typed.len()..self.cursor, "");
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
             None => {}
         }
