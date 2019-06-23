@@ -1,9 +1,10 @@
-use cursive::event::{Event, EventResult, Key, MouseButton, MouseEvent};
+use cursive::event::{Event, EventResult, Key};
 use cursive::theme::Color;
 use cursive::vec::Vec2;
 use cursive::view::{ScrollBase, View};
 use cursive::Printer;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 
 struct Row {
     start: usize,
@@ -27,6 +28,12 @@ impl Default for Syntax {
             words: HashMap::new(),
         }
     }
+}
+
+enum HistoryEvent {
+    Erase(String),
+    Type(usize),
+    Moved(usize),
 }
 
 impl Syntax {
@@ -61,6 +68,8 @@ impl Syntax {
 /// and can highligh your code using
 /// your syntax
 pub struct CodeArea {
+    history: VecDeque<HistoryEvent>,
+
     syntax: Syntax,
 
     content: String,
@@ -73,26 +82,80 @@ pub struct CodeArea {
 
     last_size: Vec2,
 
-    visible_cursor: usize,
-
-    internal_cursor: usize,
+    cursor: usize,
 }
 
+// Public interface
 impl CodeArea {
     pub fn new() -> Self {
         CodeArea {
+            history: VecDeque::new(),
             syntax: Syntax::new(),
             content: String::new(),
             rows: Vec::new(),
             enabled: true,
             scrollbase: ScrollBase::new().right_padding(0),
             last_size: Vec2::zero(),
-            visible_cursor: 0,
-            internal_cursor: 0,
+            cursor: 0,
         }
     }
     pub fn get_content(&self) -> &str {
         &self.content
+    }
+}
+
+// Internal functional
+impl CodeArea {
+    fn insert(&mut self, ch: char) {
+        self.content.insert(self.cursor, ch);
+        self.cursor += 1;
+        match self.history.front_mut() {
+            Some(HistoryEvent::Type(ref mut typed)) => *typed += 1,
+            _ => {
+                self.history.push_front(HistoryEvent::Type(1));
+            }
+        }
+    }
+    fn erase_symbol(&mut self) {
+        if self.cursor != 0 {
+            let erased_char = self.content.remove(self.cursor);
+            self.cursor -= 1;
+            match self.history.front_mut() {
+                Some(HistoryEvent::Erase(ref mut erased)) => erased.push(erased_char),
+                _ => {
+                    let mut new_erased = String::new();
+                    new_erased.push(erased_char);
+                    self.history.push_front(HistoryEvent::Erase(new_erased));
+                }
+            }
+        };
+    }
+    fn erase_line(&mut self) {
+        if self.cursor != 0 {
+            let mut erased_string = String::new();
+            let mut ch = ' ';
+            while ch != '\n' && self.cursor > 0 {
+                ch = self.content.remove(self.cursor);
+                erased_string.push(ch);
+                self.cursor -= 1;
+            }
+            match self.history.front_mut() {
+                Some(HistoryEvent::Erase(ref mut erased)) => erased.push_str(&erased_string),
+                _ => self.history.push_front(HistoryEvent::Erase(erased_string)),
+            }
+        }
+    }
+    fn undo(&mut self) {
+        match self.history.front() {
+            Some(event) => match event {
+                HistoryEvent::Erase(erased) => {
+                    let erased = erased.chars().rev().collect::<String>();
+                    self.content.insert_str(self.cursor, &erased);
+                }
+                _ => {}
+            }
+            None => {}
+        }
     }
 }
 
@@ -102,12 +165,12 @@ impl View for CodeArea {
         let mut consumed = true;
         match event {
             // Input
-            Event::Char(_) => unimplemented!(),
-            Event::Key(Key::Tab) => unimplemented!(),
-            Event::Key(Key::Enter) => unimplemented!(),
+            Event::Char(ch) => self.insert(ch),
+            Event::Key(Key::Tab) => self.insert('\t'),
+            Event::Key(Key::Enter) => self.insert('\n'),
             // Erase
-            Event::Ctrl(Key::Backspace) => unimplemented!(),
-            Event::Key(Key::Backspace) => unimplemented!(),
+            Event::Ctrl(Key::Backspace) => self.erase_line(),
+            Event::Key(Key::Backspace) => self.erase_symbol(),
             // Movement
             Event::Key(Key::Home) | Event::Ctrl(Key::Left) => unimplemented!(),
             Event::Key(Key::End) | Event::Ctrl(Key::Right) => unimplemented!(),
@@ -117,6 +180,9 @@ impl View for CodeArea {
             Event::Key(Key::Right) => unimplemented!(),
             Event::Key(Key::Up) => unimplemented!(),
             Event::Key(Key::Down) => unimplemented!(),
+            // Edit
+            Event::CtrlChar('z') => unimplemented!(),
+            Event::CtrlChar('y') => unimplemented!(),
             // TODO: Mouse events
             _ => consumed = false,
         }
