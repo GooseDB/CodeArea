@@ -1,32 +1,22 @@
-use code_area::CodeArea;
-use unicode_segmentation::UnicodeSegmentation;
+use code_area::{CodeArea, Syntax};
+use cursive::theme::Color;
+use cursive::views::{BoxView, PaddedView};
+use cursive::view::Margins;
+use cursive::Cursive;
 
 fn main() {
-    /*let mut code_area = CodeArea::new();
-    code_area.insert('f');
-    code_area.insert('o');
-    println!("{}\n", code_area.get_content());
-    code_area.erase_symbol();
-    println!("{}\n", code_area.get_content());
-    code_area.insert('o');
-    code_area.insert('o');
-    println!("{}\n", code_area.get_content());
-    code_area.left_one();
-    code_area.insert('b');
-    println!("{}\n", code_area.get_content());
-    code_area.right_one();
-    code_area.new_line();
-    code_area.insert('b');
-    code_area.insert('a');
-    println!("{}\n", code_area.get_content());
-    code_area.left_one();
-    code_area.left_one();
-    code_area.erase_symbol();
-    println!("{}\n", code_area.get_content());
-    code_area.left_line();
-    code_area.insert('x');
-    println!("{}\n", code_area.get_content());*/
-    for _ in 0..(-5) {
-        println!("foo");
-    }
+    let mut ui = Cursive::default();
+
+    ui.add_fullscreen_layer(PaddedView::new(
+        Margins::from((1, 1, 1, 1)),BoxView::with_full_screen(
+        CodeArea::new().use_syntax(
+            Syntax::new()
+                .add_one_color_symbols(&['+', '-'], Color::from_256colors(0))
+                .add_one_color_symbols(&['[', ']'], Color::from_256colors(1))
+                .add_one_color_symbols(&['>', '<'], Color::from_256colors(2))
+                .add_one_color_symbols(&['.', ','], Color::from_256colors(3))
+        )),
+    ));
+    
+    ui.run();
 }
